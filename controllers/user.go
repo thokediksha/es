@@ -6,7 +6,7 @@ import (
 	models "es/models"
 	"fmt"
 	// "net/http"
-	"strconv"
+	// "strconv"
 
 	// "strconv"
 	"strings"
@@ -16,7 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 	// uuid "github.com/satori/go.uuid"
 )
-
 
 var client *elasticsearch.Client
 
@@ -32,7 +31,6 @@ func CreateUser(c *gin.Context) {
 		panic(err)
 	}
 
-
 	fmt.Println(users.ID)
 	// Convert the user to JSON.
 	userJSON, err := json.Marshal(&users)
@@ -45,7 +43,7 @@ func CreateUser(c *gin.Context) {
 	// Create a new Index request
 	req := esapi.IndexRequest{
 		Index:      "my_index",
-		DocumentID: strconv.Itoa(users.ID),
+		DocumentID: users.ID,
 		Body:       strings.NewReader(string(userJSON)),
 		Refresh:    "true",
 	}
@@ -61,43 +59,45 @@ func CreateUser(c *gin.Context) {
 	fmt.Println(res)
 }
 
-func UpdateUser(c *gin.Context){
+func UpdateUser(c *gin.Context) {
 
 	// Get the ID of the document to update
-id := c.Param("id")
+	id := c.Param("id")
 
-// Create a new user.
-var users models.User
+	// Create a new user.
+	var users models.User
 
-if err := c.BindJSON(&users); err != nil {
-	panic(err)
+	if err := c.BindJSON(&users); err != nil {
+		panic(err)
+	}
+  
+	fmt.Println(id)
+	// Convert the user to JSON.
+	userJSON, err := json.Marshal(&users)
+	if err != nil {
+		panic(err)
+	}
+
+	// id := uuid.NewV4()
+
+	// Create a new Index request
+	req := esapi.UpdateRequest{
+		DocumentID: id,
+		Body:       strings.NewReader(string(userJSON)),
+		Refresh:    "true",
+	}
+
+	// Send the Index request
+	res, err := req.Do(context.Background(), client)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer res.Body.Close()
+
+	// Print the response
+	fmt.Println(res)
 }
 
-fmt.Println(id)
-// Convert the user to JSON.
-userJSON, err := json.Marshal(&users)
-if err != nil {
-	panic(err)
-}
-
-// id := uuid.NewV4()
-
-// Create a new Index request
-req := esapi.UpdateRequest{
-	Index:      "my_index",
-	DocumentID:  id,
-	Body:       strings.NewReader(string(userJSON)),
-	Refresh:    "true",
-}
-
-// Send the Index request
-res, err := req.Do(context.Background(), client)
-if err != nil {
-	fmt.Println(err)
-}
-defer res.Body.Close()
-
-// Print the response
-fmt.Println(res)
+func GetUser(c *gin.Context) {
 
 }
