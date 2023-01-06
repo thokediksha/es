@@ -1,29 +1,32 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	models "es/models"
 	"fmt"
-	// "net/http"
-	// "strconv"
-
-	// "strconv"
+	"net/http"
 	"strings"
 
 	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/elastic/go-elasticsearch/v7/esapi"
 	"github.com/gin-gonic/gin"
-	// uuid "github.com/satori/go.uuid"
 )
 
-var client *elasticsearch.Client
-
-func CreateUser(c *gin.Context) {
+func GetESClient() *elasticsearch.Client {
+	/* Fetching elastic Search Client */
 	client, err := elasticsearch.NewDefaultClient()
 	if err != nil {
 		panic(err)
 	}
+	return client
+
+}
+
+func CreateUser(c *gin.Context) {
+	client := GetESClient()
+
 	// Create a new user.
 	var users models.User
 
@@ -32,13 +35,12 @@ func CreateUser(c *gin.Context) {
 	}
 
 	fmt.Println(users.ID)
+
 	// Convert the user to JSON.
 	userJSON, err := json.Marshal(&users)
 	if err != nil {
 		panic(err)
 	}
-
-	// id := uuid.NewV4()
 
 	// Create a new Index request
 	req := esapi.IndexRequest{
@@ -57,47 +59,156 @@ func CreateUser(c *gin.Context) {
 
 	// Print the response
 	fmt.Println(res)
+	c.JSON(http.StatusOK, gin.H{"msg": "user added successfully"})
 }
 
-func UpdateUser(c *gin.Context) {
 
-	// Get the ID of the document to update
-	id := c.Param("id")
-
-	// Create a new user.
-	var users models.User
-
-	if err := c.BindJSON(&users); err != nil {
-		panic(err)
-	}
-  
-	fmt.Println(id)
-	// Convert the user to JSON.
-	userJSON, err := json.Marshal(&users)
+// UpdateDocument updates the specified document in Elasticsearch.
+func UpdateDocument(client *elasticsearch.Client, index, typ, id string, doc interface{}) (*esapi.Response, error) {
+	// Convert the updated document to JSON
+	docJSON, err := json.Marshal(doc)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	// id := uuid.NewV4()
-
-	// Create a new Index request
+	// Create the update request
 	req := esapi.UpdateRequest{
+		Index:      index,
 		DocumentID: id,
-		Body:       strings.NewReader(string(userJSON)),
-		Refresh:    "true",
+		Body:       bytes.NewReader(docJSON),
 	}
 
-	// Send the Index request
+	// Execute the update request
 	res, err := req.Do(context.Background(), client)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
-	defer res.Body.Close()
 
-	// Print the response
+	// Check the response status
+	if res.IsError() {
+		return nil, fmt.Errorf("error updating document: %s", res.String())
+	}
+
+	return res, nil
+}
+
+
+func UpdateUser(c *gin.Context) {
+	client := GetESClient()
+	// Get the index, type, and ID from the URL parameters
+	index := c.Param("index")
+	id := c.Param("id")
+
+	// Bind the request data to the UpdateDocumentRequest struct
+	var req models.User
+
+	err := c.ShouldBind(&req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Create a map with the updated document data
+	doc := map[string]interface{}{
+		"name": req.Name,
+		"age":  req.Age,
+	}
+
+
+	// Update the document in Elasticsearch
+	_, err = UpdateDocument(client, index, "_doc", id, doc)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return a successful response
+	c.JSON(http.StatusOK, gin.H{"message": "Document updated successfully"})
+}
+
+func DeleteUser(c *gin.Context) {
+	client := GetESClient()
+	id := c.Param("id")
+	index := c.Param("index")
+
+	// Set up the update request
+	deleteReq := esapi.DeleteRequest{
+		Index:      index,
+		DocumentID: id,
+	}
+
+	// Perform the update
+	res, err := deleteReq.Do(context.Background(), client)
+	if err != nil {
+		// handle error
+		panic(err)
+	}
+
 	fmt.Println(res)
+	c.JSON(http.StatusOK, gin.H{"msg": "user deleted successfully"})
 }
 
 func GetUser(c *gin.Context) {
+	var doc map[string]interface{}
+	client := GetESClient()
+	id := c.Param("id")
+	index := c.Param("index")
 
+	// Set up the update request
+	getReq := esapi.GetRequest{
+		Index:      index,
+		DocumentID: id,
+	}
+
+	// Perform the update
+	res, err := getReq.Do(context.Background(), client)
+	if err != nil {
+		// handle error
+		panic(err)
+	}
+
+	fmt.Println(res)
+
+	err = json.NewDecoder(res.Body).Decode(&doc)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing response body"})
+		return
+	}
+
+	// Return the document in the response
+	c.JSON(http.StatusOK, doc)
+}
+
+func GetAllUser(c *gin.Context) {
+	client := GetESClient()
+
+	index := c.Param("index")
+
+	// Set up the update request
+	getReq := esapi.SearchRequest{
+		Index: []string{index},
+	}
+
+	// Perform the update
+	res, err := getReq.Do(context.Background(), client)
+	if err != nil {
+		// handle error
+		panic(err)
+	}
+
+	fmt.Println(res)
+	var results struct {
+		Hits struct {
+			Hits []json.RawMessage `json:"hits"`
+		} `json:"hits"`
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&results)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing response body"})
+		return
+	}
+
+	// Return the search results in the response
+	c.JSON(http.StatusOK, results.Hits.Hits)
 }
