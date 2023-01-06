@@ -62,7 +62,6 @@ func CreateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"msg": "user added successfully"})
 }
 
-
 // UpdateDocument updates the specified document in Elasticsearch.
 func UpdateDocument(client *elasticsearch.Client, index, typ, id string, doc interface{}) (*esapi.Response, error) {
 	// Convert the updated document to JSON
@@ -92,7 +91,6 @@ func UpdateDocument(client *elasticsearch.Client, index, typ, id string, doc int
 	return res, nil
 }
 
-
 func UpdateUser(c *gin.Context) {
 	client := GetESClient()
 	// Get the index, type, and ID from the URL parameters
@@ -113,7 +111,6 @@ func UpdateUser(c *gin.Context) {
 		"name": req.Name,
 		"age":  req.Age,
 	}
-
 
 	// Update the document in Elasticsearch
 	_, err = UpdateDocument(client, index, "_doc", id, doc)

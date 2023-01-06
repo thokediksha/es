@@ -1,16 +1,14 @@
 package main
 
 import (
-    "log"
-    Routers "es/routers"
+	Routers "es/routers"
+	"log"
 )
 
-
-
 func main() {
-    router := Routers.SetupRouter()
+	router := Routers.SetupRouter()
 
-    if err := router.Run(":8083"); err != nil {
-        log.Fatal(err)
-    }
+	if err := router.Run(":8083"); err != nil {
+		log.Fatal(err)
+	}
 }
