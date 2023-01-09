@@ -7,6 +7,7 @@ import (
 	models "es/models"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/elastic/go-elasticsearch"
@@ -27,7 +28,7 @@ func GetESClient() *elasticsearch.Client {
 func CreateUser(c *gin.Context) {
 	client := GetESClient()
 
-	// Create a new user.
+	// Create a new user
 	var users models.User
 
 	if err := c.BindJSON(&users); err != nil {
@@ -45,7 +46,7 @@ func CreateUser(c *gin.Context) {
 	// Create a new Index request
 	req := esapi.IndexRequest{
 		Index:      "my_index",
-		DocumentID: users.ID,
+		DocumentID: strconv.Itoa(users.ID),
 		Body:       strings.NewReader(string(userJSON)),
 		Refresh:    "true",
 	}
@@ -60,45 +61,90 @@ func CreateUser(c *gin.Context) {
 	// Print the response
 	fmt.Println(res)
 	c.JSON(http.StatusCreated, gin.H{
-		"msg": "user added successfully",
-        "id": users.ID,
-        "name": users.Name,
-        "age":  users.Age,
-    })
+		"msg":  "user added successfully",
+		"id":   users.ID,
+		"name": users.Name,
+		"age":  users.Age,
+	})
+}
+
+func CreateUserBatch(c *gin.Context) {
+	client := GetESClient()
+
+	// Create a new user
+	var bulkRequest bytes.Buffer
+	var users []models.User
+
+	if err := c.BindJSON(&users); err != nil {
+		panic(err)
+	}
+
+	for _, user := range users {
+		// Convert the user to JSON
+		userJSON, err := json.Marshal(&user)
+		if err != nil {
+			panic(err)
+		}
+
+		// Add the user to the Bulk request
+		bulkRequest.Write(userJSON)
+		bulkRequest.Write([]byte("\n"))
+
+		req := esapi.IndexRequest{
+			Index:      "my_index",
+			DocumentID: strconv.Itoa(user.ID),
+			Body:       strings.NewReader(string(userJSON)),
+			Refresh:    "true",
+		}
+
+		// Send the Index request
+		res, err := req.Do(context.Background(), client)
+		if err != nil {
+			panic(err)
+		}
+
+		defer res.Body.Close()
+
+		// Print the response
+		fmt.Println(res)
+	}
+	c.JSON(http.StatusCreated, gin.H{
+		"msg": "user added successfully"})
+
 }
 
 func UpdateUser(c *gin.Context) {
-    client := GetESClient()
+	client := GetESClient()
 
 	index := c.Param("index")
-    id := c.Param("id")
-    
-    var users models.User
-    if err := c.BindJSON(&users); err != nil {
-        panic(err)
-    }
-    body := map[string]interface{}{
-        "doc": map[string]interface{}{
-            "name": users.Name,
-            "age": users.Age,
-        },
-    }
+	id := c.Param("id")
 
-    jsonBody, _ := json.Marshal(body)
+	var users models.User
+	if err := c.BindJSON(&users); err != nil {
+		panic(err)
+	}
+	body := map[string]interface{}{
+		"doc": map[string]interface{}{
+			"name": users.Name,
+			"age":  users.Age,
+		},
+	}
 
-    req := esapi.UpdateRequest{
-        Index:      index,
-        DocumentID: id,
-        Body:       bytes.NewReader(jsonBody),
-    }
-    res, _ := req.Do(context.Background(), client)
-    defer res.Body.Close()
-    fmt.Println(res.String())
-    c.JSON(http.StatusCreated, gin.H{
-        "id": id,
-        "name": users.Name,
-        "age":  users.Age,
-    })
+	jsonBody, _ := json.Marshal(body)
+
+	req := esapi.UpdateRequest{
+		Index:      index,
+		DocumentID: id,
+		Body:       bytes.NewReader(jsonBody),
+	}
+	res, _ := req.Do(context.Background(), client)
+	defer res.Body.Close()
+	fmt.Println(res.String())
+	c.JSON(http.StatusCreated, gin.H{
+		"id":   id,
+		"name": users.Name,
+		"age":  users.Age,
+	})
 }
 
 func DeleteUser(c *gin.Context) {
@@ -187,3 +233,24 @@ func GetAllUser(c *gin.Context) {
 	// Return the search results in the response
 	c.JSON(http.StatusOK, results.Hits.Hits)
 }
+
+
+func SearchData(c *gin.Context){
+	client := GetESClient()
+name := c.Query("name")
+
+		// Create a search request
+		req := esapi.SearchRequest{
+			Index: []string{"myindex"},
+			Body:  strings.NewReader(`{"query":{"query_string":{"query": "` + name + `"}}}`),
+		}
+
+		// Execute the search
+		res, err := req.Do(context.Background(), client)
+		if err != nil {
+			fmt.Printf("Error executing search: %s", err)
+		}
+
+		// Return the search result to the client
+		c.JSON(200, res.Body)
+	}
