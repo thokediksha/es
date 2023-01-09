@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elastic/go-elasticsearch/v7"
-	"github.com/elastic/go-elasticsearch/v7/esapi"
+	"github.com/elastic/go-elasticsearch"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/gin-gonic/gin"
 )
 
@@ -59,68 +59,46 @@ func CreateUser(c *gin.Context) {
 
 	// Print the response
 	fmt.Println(res)
-	c.JSON(http.StatusOK, gin.H{"msg": "user added successfully"})
-}
-
-// UpdateDocument updates the specified document in Elasticsearch.
-func UpdateDocument(client *elasticsearch.Client, index, typ, id string, doc interface{}) (*esapi.Response, error) {
-	// Convert the updated document to JSON
-	docJSON, err := json.Marshal(doc)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the update request
-	req := esapi.UpdateRequest{
-		Index:      index,
-		DocumentID: id,
-		Body:       bytes.NewReader(docJSON),
-	}
-
-	// Execute the update request
-	res, err := req.Do(context.Background(), client)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check the response status
-	if res.IsError() {
-		return nil, fmt.Errorf("error updating document: %s", res.String())
-	}
-
-	return res, nil
+	c.JSON(http.StatusCreated, gin.H{
+		"msg": "user added successfully",
+        "id": users.ID,
+        "name": users.Name,
+        "age":  users.Age,
+    })
 }
 
 func UpdateUser(c *gin.Context) {
-	client := GetESClient()
-	// Get the index, type, and ID from the URL parameters
-	index := c.Param("index")
-	id := c.Param("id")
+    client := GetESClient()
 
-	// Bind the request data to the UpdateDocumentRequest struct
-	var req models.User
+    var users models.User
+    if err := c.BindJSON(&users); err != nil {
+        panic(err)
+    }
+    body := map[string]interface{}{
+        "doc": map[string]interface{}{
+            "name": users.Name,
+            "age": users.Age,
+        },
+    }
 
-	err := c.ShouldBind(&req)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
-		return
-	}
+    index := c.Param("index")
+    id := c.Param("id")
+    
+    jsonBody, _ := json.Marshal(body)
 
-	// Create a map with the updated document data
-	doc := map[string]interface{}{
-		"name": req.Name,
-		"age":  req.Age,
-	}
-
-	// Update the document in Elasticsearch
-	_, err = UpdateDocument(client, index, "_doc", id, doc)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Return a successful response
-	c.JSON(http.StatusOK, gin.H{"message": "Document updated successfully"})
+    req := esapi.UpdateRequest{
+        Index:      index,
+        DocumentID: id,
+        Body:       bytes.NewReader(jsonBody),
+    }
+    res, _ := req.Do(context.Background(), client)
+    defer res.Body.Close()
+    fmt.Println(res.String())
+    c.JSON(http.StatusCreated, gin.H{
+        "id": id,
+        "name": users.Name,
+        "age":  users.Age,
+    })
 }
 
 func DeleteUser(c *gin.Context) {
