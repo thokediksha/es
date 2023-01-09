@@ -70,6 +70,9 @@ func CreateUser(c *gin.Context) {
 func UpdateUser(c *gin.Context) {
     client := GetESClient()
 
+	index := c.Param("index")
+    id := c.Param("id")
+    
     var users models.User
     if err := c.BindJSON(&users); err != nil {
         panic(err)
@@ -81,9 +84,6 @@ func UpdateUser(c *gin.Context) {
         },
     }
 
-    index := c.Param("index")
-    id := c.Param("id")
-    
     jsonBody, _ := json.Marshal(body)
 
     req := esapi.UpdateRequest{
