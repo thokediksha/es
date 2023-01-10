@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	models "es/models"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -123,6 +124,7 @@ func UpdateUser(c *gin.Context) {
 	if err := c.BindJSON(&users); err != nil {
 		panic(err)
 	}
+
 	body := map[string]interface{}{
 		"doc": map[string]interface{}{
 			"name": users.Name,
@@ -137,6 +139,7 @@ func UpdateUser(c *gin.Context) {
 		DocumentID: id,
 		Body:       bytes.NewReader(jsonBody),
 	}
+
 	res, _ := req.Do(context.Background(), client)
 	defer res.Body.Close()
 	fmt.Println(res.String())
@@ -204,10 +207,22 @@ func GetAllUser(c *gin.Context) {
 	client := GetESClient()
 
 	index := c.Param("index")
+	pageNumber, err := strconv.Atoi(c.Query("page"))
+    if err != nil {
+        pageNumber = 1
+    }
+    pageSize, err := strconv.Atoi(c.Query("size"))
+    if err != nil {
+        pageSize = 10
+    }
+
+	from := (pageNumber-1)*pageSize
+    size := pageSize
 
 	// Set up the update request
 	getReq := esapi.SearchRequest{
 		Index: []string{index},
+		Body:  strings.NewReader(`{"from": ` + strconv.Itoa(from) + `, "size": ` + strconv.Itoa(size) + `}`),
 	}
 
 	// Perform the update
@@ -230,27 +245,57 @@ func GetAllUser(c *gin.Context) {
 		return
 	}
 
+	totalPages := math.Ceil(float64(100000) / float64(size))
+	c.JSON(http.StatusOK, gin.H{"results": results.Hits.Hits, "currentPage": pageNumber, 
+	"totalPages": totalPages})
+
+	// Return the search results in the response
+	// c.JSON(http.StatusOK, results.Hits.Hits)
+}
+
+func SearchData(c *gin.Context) {
+	client := GetESClient()
+	// value := c.Query("id")
+	value := c.Query("name")
+	// value := c.Query("age")
+	
+	// Parse the page number and page size from the request query parameters
+    pageNumber, err := strconv.Atoi(c.Query("page"))
+    if err != nil {
+        pageNumber = 1
+    }
+    pageSize, err := strconv.Atoi(c.Query("size"))
+    if err != nil {
+        pageSize = 10
+    }
+	
+	// Create a search request
+	req := esapi.SearchRequest{
+		Index: []string{"my_index"},
+		Body:  strings.NewReader(`{"query":{"query_string":{"query": "` +value+ `"}},"from": ` + strconv.Itoa((pageNumber-1)*pageSize) + `,
+		"size": ` + strconv.Itoa(pageSize) + `}`),
+	}
+
+	// Execute the search
+	res, err := req.Do(context.Background(), client)
+	if err != nil {
+		fmt.Printf("Error executing search: %s", err)
+	}
+
+	fmt.Println(res)
+
+	var results struct {
+		Hits struct {
+			Hits []json.RawMessage `json:"hits"`
+		} `json:"hits"`
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&results)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing response body"})
+		return
+	}
+
 	// Return the search results in the response
 	c.JSON(http.StatusOK, results.Hits.Hits)
 }
-
-
-func SearchData(c *gin.Context){
-	client := GetESClient()
-name := c.Query("name")
-
-		// Create a search request
-		req := esapi.SearchRequest{
-			Index: []string{"myindex"},
-			Body:  strings.NewReader(`{"query":{"query_string":{"query": "` + name + `"}}}`),
-		}
-
-		// Execute the search
-		res, err := req.Do(context.Background(), client)
-		if err != nil {
-			fmt.Printf("Error executing search: %s", err)
-		}
-
-		// Return the search result to the client
-		c.JSON(200, res.Body)
-	}
